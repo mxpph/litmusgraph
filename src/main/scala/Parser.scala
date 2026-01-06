@@ -8,7 +8,7 @@ import Ast.*
 import Lexer.{ fully, ident, integer }
 import Lexer.implicits.implicitSymbol
 
-object Parser {
+object Parser:
   def parse(input: String) = parser.parse(input)
   def parse(input: File)   = parser.parseFile(input) match {
     case Failure(exception) => throw exception
@@ -28,5 +28,4 @@ object Parser {
       <|> FetchAndAdd(atomic("FAA") ~> "(" ~> location, "," ~> value <~ ")")
       <|> FetchAndInc("FAI" ~> "(" ~> location <~ ")")
   private lazy val location = Location(ident)
-  private lazy val value    = Value(integer)
-}
+  private lazy val value    = integer
