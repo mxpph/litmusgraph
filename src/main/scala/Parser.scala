@@ -16,8 +16,8 @@ object Parser:
   }
 
   private lazy val parser  = fully(program)
-  private lazy val program = Program(some(thread, Vector))
-  private lazy val thread  = Thread("[" ~> ident <~ "]", some(event, Vector))
+  private lazy val program = Program(some(thread))
+  private lazy val thread  = Thread("[" ~> ident <~ "]", some(event))
   private lazy val event   =
     Event(location <~ ":=", value <+> ((location <+> update) <~> ("//" ~> value))) <|>
       ("mfence" as MemoryFence) <|>

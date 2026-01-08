@@ -56,8 +56,8 @@ object Ast:
   case object MemoryFence extends Fence, ParserBridge0[MemoryFence.type]
   case object StoreFence  extends Fence, ParserBridge0[StoreFence.type]
 
-  case class Thread(ident: String, po: Vector[Event])
-  object Thread extends ParserBridge2[String, Vector[Event], Thread]
+  case class Thread(ident: String, po: List[Event])
+  object Thread extends ParserBridge2[String, List[Event], Thread]
 
-  case class Program(threads: Vector[Thread])
-  object Program extends ParserBridge1[Vector[Thread], Program]
+  case class Program(threads: List[Thread])
+  object Program extends ParserBridge1[List[Thread], Program]

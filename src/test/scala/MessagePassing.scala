@@ -12,17 +12,17 @@ class MessagePassingSpec extends AnyFlatSpec {
                           |b := x // 0""".stripMargin
 
   val messagePassingProg = Program(
-    Vector(
+    List(
       Thread(
         "t1",
-        Vector(
+        List(
           Write(Location("x"), 42),
           Write(Location("y"), 1),
         ),
       ),
       Thread(
         "t2",
-        Vector(
+        List(
           Read(Location("y"), 1)(Location("a")),
           Read(Location("x"), 0)(Location("b")),
         ),
