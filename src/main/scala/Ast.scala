@@ -1,5 +1,7 @@
 import parsley.generic.{ ParserBridge0, ParserBridge1, ParserBridge2, ParserBridge3, ParserBridge4 }
 import parsley.Parsley
+import parsley.Parsley.pure
+import parsley.errors.combinator.fail
 
 object Ast:
   type Value = Int
@@ -15,7 +17,9 @@ object Ast:
   case class Read(from: Location, value: Value)(val to: Location) extends Event
   case class Write(to: Location, value: Value)                    extends Event
 
-  sealed trait UpdateOperation
+  sealed trait UpdateOperation:
+    val loc: Location
+
   case class FetchAndAdd(loc: Location, increment: Value) extends UpdateOperation
   object FetchAndAdd extends ParserBridge2[Location, Value, FetchAndAdd]
 
@@ -51,6 +55,24 @@ object Ast:
               case FetchAndAdd(_, increment)    => oldValue + increment
               case CompareAndSwap(_, exp, swap) => if exp == oldValue then swap else oldValue
             Update(to, oldValue, newValue) // e.g. a := FAA(x, 1) // 0
+
+    override def apply(
+      to: Parsley[Location],
+      arg2: => Parsley[Either[Value, (Either[Location, UpdateOperation], Value)]]
+    ): Parsley[Event] =
+      val verifiedTo = arg2.flatMap {
+      case Left(_) => to.filter(!_.isLocal)
+      case Right((locOrUo, _)) => locOrUo match
+        case Left(_) => to.filter(_.isLocal)
+        case Right(_) => to.filter(_.isLocal)
+      }
+      val verifiedArg2 = arg2.filter {
+        case Left(_) => true
+        case Right((locOrUo, _)) => locOrUo match
+          case Left(readFrom) => !readFrom.isLocal
+          case Right(update) => !update.loc.isLocal
+      }
+      super.apply(verifiedTo, verifiedArg2)
 
   sealed trait Fence      extends Event
   case object MemoryFence extends Fence, ParserBridge0[MemoryFence.type]
