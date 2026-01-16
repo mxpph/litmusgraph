@@ -1,5 +1,6 @@
 import org.scalatest.flatspec.AnyFlatSpec
 import Ast.*
+import parsley.{Failure, Success}
 
 class MessagePassingSpec extends AnyFlatSpec {
 
@@ -16,15 +17,15 @@ class MessagePassingSpec extends AnyFlatSpec {
       Thread(
         "t1",
         List(
-          Write(Location("x"), 42),
-          Write(Location("y"), 1),
+          Write(SharedLocation("x"), 42),
+          Write(SharedLocation("y"), 1),
         ),
       ),
       Thread(
         "t2",
         List(
-          Read(Location("y"), 1)(Location("a")),
-          Read(Location("x"), 0)(Location("b")),
+          Read(SharedLocation("y"), 1)(NonSharedLocation("a")),
+          Read(SharedLocation("x"), 0)(NonSharedLocation("b")),
         ),
       ),
     ),
@@ -32,6 +33,9 @@ class MessagePassingSpec extends AnyFlatSpec {
 
   "Message passing" should "be parsed correctly" in:
     val result = Parser.parse(messagePassing)
+    result match
+        case Success(x) => ()
+        case Failure(msg) => println(msg)
     assert(result.isSuccess)
     val program = result.get
     assert(program == messagePassingProg)

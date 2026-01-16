@@ -1,3 +1,5 @@
+import parsley.character.satisfy
+import parsley.lift.lift2
 import parsley.token.{ Basic, Lexer => ParsleyLexer }
 import parsley.token.descriptions.*
 import parsley.token.errors.{ ErrorConfig, Label, LabelWithExplainConfig }
@@ -6,7 +8,7 @@ import parsley.Parsley
 object Lexer:
   private val desc = LexicalDesc.plain.copy(
     nameDesc = NameDesc.plain.copy(
-      identifierStart = Basic(c => c.isLower),
+      identifierStart = Basic(c => c.isLetter),
       identifierLetter = Basic(c => c.isLetterOrDigit),
     ),
     spaceDesc = SpaceDesc.plain.copy(
@@ -42,10 +44,10 @@ object Lexer:
 
   def fully[A](p: Parsley[A]): Parsley[A] = lexer.fully(p)
 
-  val ident: Parsley[String]   = lexer.lexeme.names.identifier
-  val nlIdent: Parsley[String] = lexer.nonlexeme.names.identifier
-  val integer: Parsley[Int]    = lexer.lexeme.integer.decimal32
-  val nlInteger: Parsley[Int]  = lexer.nonlexeme.integer.decimal32
+  val ident          = lexer.lexeme.names.identifier
+  val sharedIdent    = satisfy(c => c.isLower && c > 'm').map(_.toString) <~ lexer.space.whiteSpace
+  val nonSharedIdent = satisfy(c => c.isLower && c <= 'm').map(_.toString) <~ lexer.space.whiteSpace
+  val integer        = lexer.lexeme.integer.decimal32
 
   // Implicit symbol parsers
   val implicits = lexer.lexeme.symbol.implicits

@@ -1,78 +1,69 @@
+import parsley.errors.combinator.fail
 import parsley.generic.{ ParserBridge0, ParserBridge1, ParserBridge2, ParserBridge3, ParserBridge4 }
 import parsley.Parsley
 import parsley.Parsley.pure
-import parsley.errors.combinator.fail
 
 object Ast:
   type Value = Int
 
-  case class Location(ident: String):
-    def isLocal: Boolean =
-      val firstChar = ident.charAt(0)
-      firstChar >= 'a' && firstChar <= 'm'
-  object Location extends ParserBridge1[String, Location]
+  sealed trait Location:
+    val ident: String
+    def isLocal: Boolean
+
+  case class SharedLocation(ident: String) extends Location:
+    def isLocal = true
+  object SharedLocation extends ParserBridge1[String, SharedLocation]
+
+  case class NonSharedLocation(ident: String) extends Location:
+    def isLocal = false
+  object NonSharedLocation extends ParserBridge1[String, NonSharedLocation]
 
   sealed trait Event
 
-  case class Read(from: Location, value: Value)(val to: Location) extends Event
-  case class Write(to: Location, value: Value)                    extends Event
+  case class Read(from: SharedLocation, value: Value)(val to: NonSharedLocation) extends Event
+  case class Write(to: SharedLocation, value: Value)                             extends Event
+  object Write extends ParserBridge2[SharedLocation, Value, Write]
 
   sealed trait UpdateOperation:
-    val loc: Location
+    val loc: SharedLocation
 
-  case class FetchAndAdd(loc: Location, increment: Value) extends UpdateOperation
-  object FetchAndAdd extends ParserBridge2[Location, Value, FetchAndAdd]
+  case class FetchAndAdd(loc: SharedLocation, increment: Value) extends UpdateOperation
+  object FetchAndAdd extends ParserBridge2[SharedLocation, Value, FetchAndAdd]
 
-  object FetchAndInc extends ParserBridge1[Location, FetchAndAdd]:
-    override def apply(loc: Location): FetchAndAdd = FetchAndAdd(loc, 1)
+  object FetchAndInc extends ParserBridge1[SharedLocation, FetchAndAdd]:
+    override def apply(loc: SharedLocation): FetchAndAdd = FetchAndAdd(loc, 1)
 
-  case class CompareAndSwap(loc: Location, expected: Value, newValue: Value) extends UpdateOperation
-  object CompareAndSwap extends ParserBridge3[Location, Value, Value, CompareAndSwap]
+  case class CompareAndSwap(loc: SharedLocation, expected: Value, newValue: Value)
+      extends UpdateOperation
+  object CompareAndSwap extends ParserBridge3[SharedLocation, Value, Value, CompareAndSwap]
 
   case class Update(
-      loc: Location,
+      loc: SharedLocation,
       readValue: Value,
       writeValue: Value,
   ) extends Event
-  object Update extends ParserBridge3[Location, Value, Value, Update]
+  object Update extends ParserBridge3[SharedLocation, Value, Value, Update]
 
-  object Event
-      extends ParserBridge2[
-        Location,
-        Either[Value, (Either[Location, UpdateOperation], Value)],
-        Event,
+  object ReadOrUpdate
+      extends ParserBridge3[
+        NonSharedLocation,
+        Either[SharedLocation, UpdateOperation],
+        Value,
+        Read | Update,
       ]:
     override def apply(
-        to: Location,
-        arg2: Either[Value, (Either[Location, UpdateOperation], Value)],
-    ): Event = arg2 match
-      case Left(value)              => Write(to, value) // e.g. x := 1
-      case Right(locOrUo, oldValue) =>
-        locOrUo match
-          case Left(from)    => Read(from, oldValue)(to) // e.g. a := x // 2
-          case Right(update) =>
-            val newValue = update match
-              case FetchAndAdd(_, increment)    => oldValue + increment
-              case CompareAndSwap(_, exp, swap) => if exp == oldValue then swap else oldValue
-            Update(to, oldValue, newValue) // e.g. a := FAA(x, 1) // 0
-
-    override def apply(
-      to: Parsley[Location],
-      arg2: => Parsley[Either[Value, (Either[Location, UpdateOperation], Value)]]
-    ): Parsley[Event] =
-      val verifiedTo = arg2.flatMap {
-      case Left(_) => to.filter(!_.isLocal)
-      case Right((locOrUo, _)) => locOrUo match
-        case Left(_) => to.filter(_.isLocal)
-        case Right(_) => to.filter(_.isLocal)
-      }
-      val verifiedArg2 = arg2.filter {
-        case Left(_) => true
-        case Right((locOrUo, _)) => locOrUo match
-          case Left(readFrom) => !readFrom.isLocal
-          case Right(update) => !update.loc.isLocal
-      }
-      super.apply(verifiedTo, verifiedArg2)
+        to: NonSharedLocation,
+        arg2: Either[SharedLocation, UpdateOperation],
+        readValue: Value,
+    ): Read | Update =
+      arg2 match
+        case Left(from)      => Read(from, readValue)(to) // e.g. a := x // 2
+        case Right(updateOp) =>
+          val writeValue = updateOp match
+            case FetchAndAdd(sloc, increment)    => readValue + increment
+            case CompareAndSwap(sloc, exp, swap) =>
+              if exp == readValue then swap else readValue
+          Update(updateOp.loc, readValue, writeValue) // e.g. a := FAA(x, 1) // 0
 
   sealed trait Fence      extends Event
   case object MemoryFence extends Fence, ParserBridge0[MemoryFence.type]
